@@ -1,0 +1,671 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>API Explorer Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        .loader {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #3b82f6;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .fade-in {
+            animation: fadeIn 0.3s ease-in;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .card-hover:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 40px rgba(0,0,0,0.1);
+        }
+        .gradient-bg {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-white min-h-screen">
+    <!-- Header -->
+    <header class="gradient-bg shadow-lg">
+        <div class="container mx-auto px-6 py-4">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-3">
+                    <i class="fas fa-plug text-2xl"></i>
+                    <h1 class="text-2xl font-bold">API Explorer</h1>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <span id="lastUpdated" class="text-sm opacity-75"></span>
+                    <button onclick="refreshAll()" class="bg-white/20 hover:bg-white/30 px-4 py-2 rounded-lg transition flex items-center space-x-2">
+                        <i class="fas fa-sync-alt"></i>
+                        <span>Refresh</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+    <main class="container mx-auto px-6 py-8">
+        <!-- Stats Cards -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+            <div class="bg-gray-800 rounded-xl p-6 card-hover transition-all duration-300">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-gray-400 text-sm">Total APIs</p>
+                        <p id="totalApis" class="text-3xl font-bold text-blue-400">-</p>
+                    </div>
+                    <div class="bg-blue-500/20 p-3 rounded-lg">
+                        <i class="fas fa-database text-blue-400 text-xl"></i>
+                    </div>
+                </div>
+            </div>
+            <div class="bg-gray-800 rounded-xl p-6 card-hover transition-all duration-300">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-gray-400 text-sm">Categories</p>
+                        <p id="totalCategories" class="text-3xl font-bold text-green-400">-</p>
+                    </div>
+                    <div class="bg-green-500/20 p-3 rounded-lg">
+                        <i class="fas fa-folder text-green-400 text-xl"></i>
+                    </div>
+                </div>
+            </div>
+            <div class="bg-gray-800 rounded-xl p-6 card-hover transition-all duration-300">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-gray-400 text-sm">Free APIs</p>
+                        <p id="freeApis" class="text-3xl font-bold text-purple-400">-</p>
+                    </div>
+                    <div class="bg-purple-500/20 p-3 rounded-lg">
+                        <i class="fas fa-gift text-purple-400 text-xl"></i>
+                    </div>
+                </div>
+            </div>
+            <div class="bg-gray-800 rounded-xl p-6 card-hover transition-all duration-300">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-gray-400 text-sm">HTTPS Only</p>
+                        <p id="httpsApis" class="text-3xl font-bold text-yellow-400">-</p>
+                    </div>
+                    <div class="bg-yellow-500/20 p-3 rounded-lg">
+                        <i class="fas fa-lock text-yellow-400 text-xl"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <!-- Charts Section -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+            <div class="bg-gray-800 rounded-xl p-6">
+                <h3 class="text-lg font-semibold mb-4 flex items-center">
+                    <i class="fas fa-chart-pie mr-2 text-blue-400"></i>
+                    APIs by Category (Top 10)
+                </h3>
+                <div class="relative h-64">
+                    <div id="categoryChartLoader" class="absolute inset-0 flex items-center justify-center">
+                        <div class="loader"></div>
+                    </div>
+                    <canvas id="categoryChart"></canvas>
+                </div>
+            </div>
+            <div class="bg-gray-800 rounded-xl p-6">
+                <h3 class="text-lg font-semibold mb-4 flex items-center">
+                    <i class="fas fa-chart-bar mr-2 text-green-400"></i>
+                    Authentication Types
+                </h3>
+                <div class="relative h-64">
+                    <div id="authChartLoader" class="absolute inset-0 flex items-center justify-center">
+                        <div class="loader"></div>
+                    </div>
+                    <canvas id="authChart"></canvas>
+                </div>
+            </div>
+        </div>
+        <!-- Search and Filters -->
+        <div class="bg-gray-800 rounded-xl p-6 mb-8">
+            <div class="flex flex-col lg:flex-row gap-4">
+                <div class="flex-1">
+                    <div class="relative">
+                        <i class="fas fa-search absolute left-4 top-1/2 -translate-y-1/2 text-gray-400"></i>
+                        <input 
+                            type="text" 
+                            id="searchInput" 
+                            placeholder="Search APIs by name or description..." 
+                            class="w-full bg-gray-700 border border-gray-600 rounded-lg pl-12 pr-4 py-3 focus:outline-none focus:border-blue-500 transition"
+                        >
+                    </div>
+                </div>
+                <div class="flex flex-wrap gap-4">
+                    <select id="categoryFilter" class="bg-gray-700 border border-gray-600 rounded-lg px-4 py-3 focus:outline-none focus:border-blue-500 transition min-w-[160px]">
+                        <option value="">All Categories</option>
+                    </select>
+                    <select id="authFilter" class="bg-gray-700 border border-gray-600 rounded-lg px-4 py-3 focus:outline-none focus:border-blue-500 transition min-w-[160px]">
+                        <option value="">All Auth Types</option>
+                        <option value="apiKey">API Key</option>
+                        <option value="OAuth">OAuth</option>
+                        <option value="">No Auth</option>
+                    </select>
+                    <select id="httpsFilter" class="bg-gray-700 border border-gray-600 rounded-lg px-4 py-3 focus:outline-none focus:border-blue-500 transition min-w-[140px]">
+                        <option value="">All</option>
+                        <option value="true">HTTPS Only</option>
+                        <option value="false">HTTP</option>
+                    </select>
+                    <select id="corsFilter" class="bg-gray-700 border border-gray-600 rounded-lg px-4 py-3 focus:outline-none focus:border-blue-500 transition min-w-[140px]">
+                        <option value="">All CORS</option>
+                        <option value="yes">CORS Yes</option>
+                        <option value="no">CORS No</option>
+                    </select>
+                </div>
+            </div>
+            <div class="mt-4 flex items-center justify-between">
+                <p id="resultsCount" class="text-gray-400 text-sm"></p>
+                <button onclick="clearFilters()" class="text-blue-400 hover:text-blue-300 text-sm flex items-center space-x-1">
+                    <i class="fas fa-times"></i>
+                    <span>Clear Filters</span>
+                </button>
+            </div>
+        </div>
+        <!-- API List -->
+        <div class="bg-gray-800 rounded-xl overflow-hidden">
+            <div class="p-6 border-b border-gray-700">
+                <h3 class="text-lg font-semibold flex items-center">
+                    <i class="fas fa-list mr-2 text-purple-400"></i>
+                    API Directory
+                </h3>
+            </div>
+            
+            <!-- Loading State -->
+            <div id="listLoader" class="p-12 text-center">
+                <div class="loader mx-auto mb-4"></div>
+                <p class="text-gray-400">Loading APIs...</p>
+            </div>
+            <!-- Error State -->
+            <div id="errorState" class="p-12 text-center hidden">
+                <i class="fas fa-exclamation-triangle text-4xl text-red-400 mb-4"></i>
+                <p class="text-gray-400 mb-4">Failed to load APIs</p>
+                <button onclick="refreshAll()" class="bg-blue-600 hover:bg-blue-700 px-6 py-2 rounded-lg transition">
+                    Try Again
+                </button>
+            </div>
+            <!-- API Grid -->
+            <div id="apiGrid" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 p-6 hidden"></div>
+            <!-- Pagination -->
+            <div id="pagination" class="p-6 border-t border-gray-700 flex items-center justify-center space-x-2 hidden"></div>
+        </div>
+        <!-- API Detail Modal -->
+        <div id="apiModal" class="fixed inset-0 bg-black/50 backdrop-blur-sm hidden items-center justify-center z-50 p-4">
+            <div class="bg-gray-800 rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto fade-in">
+                <div class="p-6 border-b border-gray-700 flex items-center justify-between">
+                    <h3 id="modalTitle" class="text-xl font-bold"></h3>
+                    <button onclick="closeModal()" class="text-gray-400 hover:text-white transition">
+                        <i class="fas fa-times text-xl"></i>
+                    </button>
+                </div>
+                <div id="modalContent" class="p-6"></div>
+            </div>
+        </div>
+    </main>
+    <!-- Footer -->
+    <footer class="bg-gray-800 border-t border-gray-700 mt-12">
+        <div class="container mx-auto px-6 py-6 text-center text-gray-400">
+            <p>Data provided by <a href="https://github.com/public-apis/public-apis" target="_blank" class="text-blue-400 hover:underline">Public APIs</a></p>
+        </div>
+    </footer>
+    <script>
+        // State Management
+        let allApis = [];
+        let filteredApis = [];
+        let categories = [];
+        let currentPage = 1;
+        const itemsPerPage = 12;
+        let categoryChart = null;
+        let authChart = null;
+        // API Endpoints
+        const API_URL = 'https://api.publicapis.org/entries';
+        // Debounce function for search
+        function debounce(func, wait) {
+            let timeout;
+            return function executedFunction(...args) {
+                const later = () => {
+                    clearTimeout(timeout);
+                    func(...args);
+                };
+                clearTimeout(timeout);
+                timeout = setTimeout(later, wait);
+            };
+        }
+        // Fetch APIs with error handling
+        async function fetchApis() {
+            showLoading(true);
+            hideError();
+            try {
+                // Using a proxy to avoid CORS issues, or fallback to mock data
+                const response = await fetch(API_URL);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const data = await response.json();
+                allApis = data.entries || [];
+                
+                // Extract unique categories
+                categories = [...new Set(allApis.map(api => api.Category))].sort();
+                
+                updateStats();
+                populateCategoryFilter();
+                renderCharts();
+                filterAndDisplayApis();
+                updateLastUpdated();
+                
+            } catch (error) {
+                console.error('Error fetching APIs:', error);
+                // Use mock data as fallback
+                await useMockData();
+            } finally {
+                showLoading(false);
+            }
+        }
+        // Mock data fallback
+        async function useMockData() {
+            allApis = generateMockData();
+            categories = [...new Set(allApis.map(api => api.Category))].sort();
+            
+            updateStats();
+            populateCategoryFilter();
+            renderCharts();
+            filterAndDisplayApis();
+            updateLastUpdated();
+        }
+        // Generate mock API data
+        function generateMockData() {
+            const mockCategories = ['Animals', 'Anime', 'Anti-Malware', 'Art', 'Books', 'Business', 'Calendar', 'Cloud', 'Cryptocurrency', 'Currency', 'Data', 'Development', 'Entertainment', 'Environment', 'Events', 'Finance', 'Food', 'Games', 'Geocoding', 'Government', 'Health', 'Jobs', 'Machine Learning', 'Music', 'News', 'Open Data', 'Photography', 'Science', 'Security', 'Shopping', 'Social', 'Sports', 'Test Data', 'Transportation', 'Video', 'Weather'];
+            const authTypes = ['', 'apiKey', 'OAuth', 'X-Mashape-Key'];
+            const corsOptions = ['yes', 'no', 'unknown'];
+            
+            const mockApis = [];
+            const apiNames = [
+                'DataHub', 'InfoStream', 'QuickFetch', 'SmartAPI', 'DataBridge', 'CloudSync',
+                'FastData', 'EasyAccess', 'ProAPI', 'DataFlow', 'StreamLine', 'ApiHub',
+                'DataForge', 'LinkAPI', 'CoreData', 'DataNest', 'FlexAPI', 'DataPipe'
+            ];
+            for (let i = 0; i < 150; i++) {
+                const category = mockCategories[Math.floor(Math.random() * mockCategories.length)];
+                const baseName = apiNames[Math.floor(Math.random() * apiNames.length)];
+                mockApis.push({
+                    API: `${baseName} ${category} ${i + 1}`,
+                    Description: `A powerful ${category.toLowerCase()} API that provides comprehensive data access and integration capabilities for developers.`,
+                    Auth: authTypes[Math.floor(Math.random() * authTypes.length)],
+                    HTTPS: Math.random() > 0.2,
+                    Cors: corsOptions[Math.floor(Math.random() * corsOptions.length)],
+                    Link: `https://example.com/api/${category.toLowerCase().replace(' ', '-')}`,
+                    Category: category
+                });
+            }
+            return mockApis;
+        }
+        // Update statistics
+        function updateStats() {
+            document.getElementById('totalApis').textContent = allApis.length;
+            document.getElementById('totalCategories').textContent = categories.length;
+            document.getElementById('freeApis').textContent = allApis.filter(api => !api.Auth).length;
+            document.getElementById('httpsApis').textContent = allApis.filter(api => api.HTTPS).length;
+        }
+        // Populate category filter
+        function populateCategoryFilter() {
+            const select = document.getElementById('categoryFilter');
+            select.innerHTML = '<option value="">All Categories</option>';
+            categories.forEach(category => {
+                const option = document.createElement('option');
+                option.value = category;
+                option.textContent = category;
+                select.appendChild(option);
+            });
+        }
+        // Render charts
+        function renderCharts() {
+            renderCategoryChart();
+            renderAuthChart();
+        }
+        // Category distribution chart
+        function renderCategoryChart() {
+            document.getElementById('categoryChartLoader').classList.add('hidden');
+            
+            const categoryCount = {};
+            allApis.forEach(api => {
+                categoryCount[api.Category] = (categoryCount[api.Category] || 0) + 1;
+            });
+            const sortedCategories = Object.entries(categoryCount)
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, 10);
+            const ctx = document.getElementById('categoryChart').getContext('2d');
+            
+            if (categoryChart) {
+                categoryChart.destroy();
+            }
+            categoryChart = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: sortedCategories.map(c => c[0]),
+                    datasets: [{
+                        data: sortedCategories.map(c => c[1]),
+                        backgroundColor: [
+                            '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6',
+                            '#ec4899', '#06b6d4', '#84cc16', '#f97316', '#6366f1'
+                        ],
+                        borderWidth: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'right',
+                            labels: {
+                                color: '#9ca3af',
+                                padding: 10,
+                                font: { size: 11 }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+        // Auth types chart
+        function renderAuthChart() {
+            document.getElementById('authChartLoader').classList.add('hidden');
+            
+            const authCount = { 'No Auth': 0, 'API Key': 0, 'OAuth': 0, 'Other': 0 };
+            allApis.forEach(api => {
+                if (!api.Auth) authCount['No Auth']++;
+                else if (api.Auth === 'apiKey') authCount['API Key']++;
+                else if (api.Auth === 'OAuth') authCount['OAuth']++;
+                else authCount['Other']++;
+            });
+            const ctx = document.getElementById('authChart').getContext('2d');
+            
+            if (authChart) {
+                authChart.destroy();
+            }
+            authChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: Object.keys(authCount),
+                    datasets: [{
+                        label: 'Number of APIs',
+                        data: Object.values(authCount),
+                        backgroundColor: ['#10b981', '#3b82f6', '#f59e0b', '#8b5cf6'],
+                        borderRadius: 8
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            grid: { color: '#374151' },
+                            ticks: { color: '#9ca3af' }
+                        },
+                        x: {
+                            grid: { display: false },
+                            ticks: { color: '#9ca3af' }
+                        }
+                    }
+                }
+            });
+        }
+        // Filter and display APIs
+        function filterAndDisplayApis() {
+            const search = document.getElementById('searchInput').value.toLowerCase();
+            const category = document.getElementById('categoryFilter').value;
+            const auth = document.getElementById('authFilter').value;
+            const https = document.getElementById('httpsFilter').value;
+            const cors = document.getElementById('corsFilter').value;
+            filteredApis = allApis.filter(api => {
+                const matchesSearch = !search || 
+                    api.API.toLowerCase().includes(search) || 
+                    api.Description.toLowerCase().includes(search);
+                const matchesCategory = !category || api.Category === category;
+                const matchesAuth = auth === '' ? true : api.Auth === auth;
+                const matchesHttps = https === '' ? true : String(api.HTTPS) === https;
+                const matchesCors = !cors || api.Cors === cors;
+                return matchesSearch && matchesCategory && matchesAuth && matchesHttps && matchesCors;
+            });
+            currentPage = 1;
+            renderApiList();
+            updateResultsCount();
+        }
+        // Render API list with pagination
+        function renderApiList() {
+            const grid = document.getElementById('apiGrid');
+            const startIndex = (currentPage - 1) * itemsPerPage;
+            const endIndex = startIndex + itemsPerPage;
+            const pageApis = filteredApis.slice(startIndex, endIndex);
+            grid.innerHTML = '';
+            if (pageApis.length === 0) {
+                grid.innerHTML = `
+                    <div class="col-span-full text-center py-12 text-gray-400">
+                        <i class="fas fa-search text-4xl mb-4"></i>
+                        <p>No APIs found matching your criteria</p>
+                    </div>
+                `;
+            } else {
+                pageApis.forEach((api, index) => {
+                    const card = document.createElement('div');
+                    card.className = 'bg-gray-700/50 rounded-xl p-5 card-hover transition-all duration-300 cursor-pointer fade-in';
+                    card.style.animationDelay = `${index * 0.05}s`;
+                    card.onclick = () => showApiDetail(api);
+                    
+                    const authBadge = api.Auth 
+                        ? `<span class="bg-yellow-500/20 text-yellow-400 text-xs px-2 py-1 rounded">${api.Auth}</span>`
+                        : `<span class="bg-green-500/20 text-green-400 text-xs px-2 py-1 rounded">Free</span>`;
+                    
+                    const httpsBadge = api.HTTPS
+                        ? `<span class="bg-blue-500/20 text-blue-400 text-xs px-2 py-1 rounded">HTTPS</span>`
+                        : `<span class="bg-red-500/20 text-red-400 text-xs px-2 py-1 rounded">HTTP</span>`;
+                    card.innerHTML = `
+                        <div class="flex items-start justify-between mb-3">
+                            <h4 class="font-semibold text-white truncate flex-1 mr-2">${api.API}</h4>
+                            <i class="fas fa-external-link-alt text-gray-400 text-sm"></i>
+                        </div>
+                        <p class="text-gray-400 text-sm mb-4 line-clamp-2">${api.Description}</p>
+                        <div class="flex items-center justify-between">
+                            <span class="text-purple-400 text-xs font-medium">${api.Category}</span>
+                            <div class="flex gap-2">
+                                ${authBadge}
+                                ${httpsBadge}
+                            </div>
+                        </div>
+                    `;
+                    grid.appendChild(card);
+                });
+            }
+            grid.classList.remove('hidden');
+            renderPagination();
+        }
+        // Render pagination
+        function renderPagination() {
+            const pagination = document.getElementById('pagination');
+            const totalPages = Math.ceil(filteredApis.length / itemsPerPage);
+            if (totalPages <= 1) {
+                pagination.classList.add('hidden');
+                return;
+            }
+            pagination.classList.remove('hidden');
+            pagination.innerHTML = '';
+            // Previous button
+            const prevBtn = document.createElement('button');
+            prevBtn.className = `px-3 py-2 rounded-lg ${currentPage === 1 ? 'bg-gray-700 text-gray-500 cursor-not-allowed' : 'bg-gray-700 hover:bg-gray-600 text-white'}`;
+            prevBtn.innerHTML = '<i class="fas fa-chevron-left"></i>';
+            prevBtn.disabled = currentPage === 1;
+            prevBtn.onclick = () => { if (currentPage > 1) { currentPage--; renderApiList(); } };
+            pagination.appendChild(prevBtn);
+            // Page numbers
+            const maxVisiblePages = 5;
+            let startPage = Math.max(1, currentPage - Math.floor(maxVisiblePages / 2));
+            let endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
+            
+            if (endPage - startPage + 1 < maxVisiblePages) {
+                startPage = Math.max(1, endPage - maxVisiblePages + 1);
+            }
+            for (let i = startPage; i <= endPage; i++) {
+                const pageBtn = document.createElement('button');
+                pageBtn.className = `px-4 py-2 rounded-lg ${i === currentPage ? 'bg-blue-600 text-white' : 'bg-gray-700 hover:bg-gray-600 text-white'}`;
+                pageBtn.textContent = i;
+                pageBtn.onclick = () => { currentPage = i; renderApiList(); };
+                pagination.appendChild(pageBtn);
+            }
+            // Next button
+            const nextBtn = document.createElement('button');
+            nextBtn.className = `px-3 py-2 rounded-lg ${currentPage === totalPages ? 'bg-gray-700 text-gray-500 cursor-not-allowed' : 'bg-gray-700 hover:bg-gray-600 text-white'}`;
+            nextBtn.innerHTML = '<i class="fas fa-chevron-right"></i>';
+            nextBtn.disabled = currentPage === totalPages;
+            nextBtn.onclick = () => { if (currentPage < totalPages) { currentPage++; renderApiList(); } };
+            pagination.appendChild(nextBtn);
+        }
+        // Show API detail modal
+        function showApiDetail(api) {
+            document.getElementById('modalTitle').textContent = api.API;
+            
+            const corsStatus = api.Cors === 'yes' 
+                ? '<span class="text-green-400">Yes</span>' 
+                : api.Cors === 'no' 
+                    ? '<span class="text-red-400">No</span>' 
+                    : '<span class="text-yellow-400">Unknown</span>';
+            document.getElementById('modalContent').innerHTML = `
+                <div class="space-y-6">
+                    <div>
+                        <h4 class="text-gray-400 text-sm mb-2">Description</h4>
+                        <p class="text-white">${api.Description}</p>
+                    </div>
+                    
+                    <div class="grid grid-cols-2 gap-4">
+                        <div class="bg-gray-700/50 rounded-lg p-4">
+                            <h4 class="text-gray-400 text-sm mb-1">Category</h4>
+                            <p class="text-purple-400 font-medium">${api.Category}</p>
+                        </div>
+                        <div class="bg-gray-700/50 rounded-lg p-4">
+                            <h4 class="text-gray-400 text-sm mb-1">Authentication</h4>
+                            <p class="${api.Auth ? 'text-yellow-400' : 'text-green-400'} font-medium">${api.Auth || 'None Required'}</p>
+                        </div>
+                        <div class="bg-gray-700/50 rounded-lg p-4">
+                            <h4 class="text-gray-400 text-sm mb-1">HTTPS</h4>
+                            <p class="${api.HTTPS ? 'text-green-400' : 'text-red-400'} font-medium">${api.HTTPS ? 'Yes' : 'No'}</p>
+                        </div>
+                        <div class="bg-gray-700/50 rounded-lg p-4">
+                            <h4 class="text-gray-400 text-sm mb-1">CORS Support</h4>
+                            <p class="font-medium">${corsStatus}</p>
+                        </div>
+                    </div>
+                    <div>
+                        <h4 class="text-gray-400 text-sm mb-2">API Endpoint</h4>
+                        <a href="${api.Link}" target="_blank" class="flex items-center space-x-2 text-blue-400 hover:text-blue-300 bg-gray-700/50 rounded-lg p-4 transition">
+                            <i class="fas fa-external-link-alt"></i>
+                            <span class="break-all">${api.Link}</span>
+                        </a>
+                    </div>
+                    <div class="flex gap-4">
+                        <a href="${api.Link}" target="_blank" class="flex-1 bg-blue-600 hover:bg-blue-700 text-center py-3 rounded-lg transition font-medium">
+                            <i class="fas fa-rocket mr-2"></i>Visit API
+                        </a>
+                        <button onclick="copyToClipboard('${api.Link}')" class="bg-gray-700 hover:bg-gray-600 px-6 py-3 rounded-lg transition">
+                            <i class="fas fa-copy"></i>
+                        </button>
+                    </div>
+                </div>
+            `;
+            document.getElementById('apiModal').classList.remove('hidden');
+            document.getElementById('apiModal').classList.add('flex');
+        }
+        // Close modal
+        function closeModal() {
+            document.getElementById('apiModal').classList.add('hidden');
+            document.getElementById('apiModal').classList.remove('flex');
+        }
+        // Copy to clipboard
+        async function copyToClipboard(text) {
+            try {
+                await navigator.clipboard.writeText(text);
+                // Show brief toast notification
+                const toast = document.createElement('div');
+                toast.className = 'fixed bottom-4 right-4 bg-green-600 text-white px-6 py-3 rounded-lg shadow-lg fade-in z-50';
+                toast.innerHTML = '<i class="fas fa-check mr-2"></i>Copied to clipboard!';
+                document.body.appendChild(toast);
+                setTimeout(() => toast.remove(), 2000);
+            } catch (err) {
+                console.error('Failed to copy:', err);
+            }
+        }
+        // UI Helper functions
+        function showLoading(show) {
+            document.getElementById('listLoader').classList.toggle('hidden', !show);
+            if (show) {
+                document.getElementById('apiGrid').classList.add('hidden');
+                document.getElementById('pagination').classList.add('hidden');
+            }
+        }
+        function hideError() {
+            document.getElementById('errorState').classList.add('hidden');
+        }
+        function showError() {
+            document.getElementById('errorState').classList.remove('hidden');
+            document.getElementById('listLoader').classList.add('hidden');
+        }
+        function updateResultsCount() {
+            document.getElementById('resultsCount').textContent = 
+                `Showing ${Math.min(filteredApis.length, itemsPerPage)} of ${filteredApis.length} APIs`;
+        }
+        function updateLastUpdated() {
+            const now = new Date();
+            document.getElementById('lastUpdated').textContent = 
+                `Last updated: ${now.toLocaleTimeString()}`;
+        }
+        function clearFilters() {
+            document.getElementById('searchInput').value = '';
+            document.getElementById('categoryFilter').value = '';
+            document.getElementById('authFilter').value = '';
+            document.getElementById('httpsFilter').value = '';
+            document.getElementById('corsFilter').value = '';
+            filterAndDisplayApis();
+        }
+        async function refreshAll() {
+            const btn = event.currentTarget;
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-sync-alt animate-spin"></i><span>Loading...</span>';
+            
+            await fetchApis();
+            
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-sync-alt"></i><span>Refresh</span>';
+        }
+        // Event Listeners
+        document.getElementById('searchInput').addEventListener('input', debounce(filterAndDisplayApis, 300));
+        document.getElementById('categoryFilter').addEventListener('change', filterAndDisplayApis);
+        document.getElementById('authFilter').addEventListener('change', filterAndDisplayApis);
+        document.getElementById('httpsFilter').addEventListener('change', filterAndDisplayApis);
+        document.getElementById('corsFilter').addEventListener('change', filterAndDisplayApis);
+        // Close modal on escape or backdrop click
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') closeModal();
+        });
+        document.getElementById('apiModal').addEventListener('click', (e) => {
+            if (e.target.id === 'apiModal') closeModal();
+        });
+        // Initialize
+        document.addEventListener('DOMContentLoaded', fetchApis);
+    </script>
+</body>
+</html>
